@@ -2,7 +2,7 @@
 
 
 
-A full-stack application for monitoring Docker containers with a React Native (Expo) frontend and Node.js backend, all running in Docker with hot-reload support.
+<p>A full-stack application for monitoring Docker containers with a React Native (Expo) frontend and Node.js backend, all running in Docker with hot-reload support.</p>
 
 
 
