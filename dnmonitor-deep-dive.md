@@ -1,6 +1,5 @@
 # DNMonitor: Complete Technical Deep Dive
-## A 3-Hour Deep Learning Journey into Docker Monitoring Architecture
-
+## Engineering behind Architecture
 ---
 
 ## Table of Contents
