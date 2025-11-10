@@ -1,4 +1,4 @@
-# DNMonitor - Docker Container Monitoring Application# DNMonitor - Docker Container Monitoring Application# DNMonitor - Docker Container Monitor
+# DNMonitor - Docker Container Monitoring Application
 
 
 
