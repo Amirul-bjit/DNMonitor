@@ -1,7 +1,10 @@
 import express from 'express';
 import Docker from 'dockerode';
 import cors from 'cors';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
+const execAsync = promisify(exec);
 const app = express();
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 const PORT = process.env.PORT || 4000;
@@ -165,6 +168,163 @@ app.get('/api/containers/:nameOrId', async (req, res) => {
   } catch (err) {
     console.error('[Backend] Error fetching container details:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/containers/:nameOrId/start - Start a container
+app.post('/api/containers/:nameOrId/start', async (req, res) => {
+  try {
+    const nameOrId = req.params.nameOrId;
+    
+    const containers = await docker.listContainers({ all: true });
+    const container = containers.find(c => 
+      c.Id === nameOrId || c.Names[0].includes(nameOrId)
+    );
+    
+    if (!container) {
+      return res.status(404).json({ error: 'Container not found' });
+    }
+
+    const dockerContainer = docker.getContainer(container.Id);
+    await dockerContainer.start();
+    
+    res.json({ success: true, message: `Container ${container.Names[0]} started` });
+  } catch (err) {
+    console.error('[Backend] Error starting container:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/containers/:nameOrId/stop - Stop a container
+app.post('/api/containers/:nameOrId/stop', async (req, res) => {
+  try {
+    const nameOrId = req.params.nameOrId;
+    
+    const containers = await docker.listContainers({ all: true });
+    const container = containers.find(c => 
+      c.Id === nameOrId || c.Names[0].includes(nameOrId)
+    );
+    
+    if (!container) {
+      return res.status(404).json({ error: 'Container not found' });
+    }
+
+    const dockerContainer = docker.getContainer(container.Id);
+    await dockerContainer.stop();
+    
+    res.json({ success: true, message: `Container ${container.Names[0]} stopped` });
+  } catch (err) {
+    console.error('[Backend] Error stopping container:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/containers/:nameOrId/restart - Restart a container
+app.post('/api/containers/:nameOrId/restart', async (req, res) => {
+  try {
+    const nameOrId = req.params.nameOrId;
+    
+    const containers = await docker.listContainers({ all: true });
+    const container = containers.find(c => 
+      c.Id === nameOrId || c.Names[0].includes(nameOrId)
+    );
+    
+    if (!container) {
+      return res.status(404).json({ error: 'Container not found' });
+    }
+
+    const dockerContainer = docker.getContainer(container.Id);
+    await dockerContainer.restart();
+    
+    res.json({ success: true, message: `Container ${container.Names[0]} restarted` });
+  } catch (err) {
+    console.error('[Backend] Error restarting container:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/containers/:nameOrId - Remove a container with volumes
+app.delete('/api/containers/:nameOrId', async (req, res) => {
+  try {
+    const nameOrId = req.params.nameOrId;
+    const { volumes } = req.query;
+    
+    const containers = await docker.listContainers({ all: true });
+    const container = containers.find(c => 
+      c.Id === nameOrId || c.Names[0].includes(nameOrId)
+    );
+    
+    if (!container) {
+      return res.status(404).json({ error: 'Container not found' });
+    }
+
+    const dockerContainer = docker.getContainer(container.Id);
+    
+    // Stop container first if running
+    if (container.State === 'running') {
+      await dockerContainer.stop();
+    }
+    
+    // Remove container with volumes option
+    await dockerContainer.remove({ v: volumes === 'true' });
+    
+    res.json({ 
+      success: true, 
+      message: `Container ${container.Names[0]} removed${volumes === 'true' ? ' with volumes' : ''}`
+    });
+  } catch (err) {
+    console.error('[Backend] Error removing container:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/compose/up - Start all compose services
+app.post('/api/compose/up', async (req, res) => {
+  try {
+    const { stdout, stderr } = await execAsync('docker compose up -d', { cwd: '/app' });
+    res.json({ 
+      success: true, 
+      message: 'Compose services started',
+      output: stdout || stderr 
+    });
+  } catch (err) {
+    console.error('[Backend] Error starting compose:', err);
+    res.status(500).json({ error: err.message, output: err.stderr });
+  }
+});
+
+// POST /api/compose/down - Stop all compose services
+app.post('/api/compose/down', async (req, res) => {
+  try {
+    const { removeOrphans } = req.query;
+    const command = removeOrphans === 'true' 
+      ? 'docker compose down --remove-orphans' 
+      : 'docker compose down';
+    
+    const { stdout, stderr } = await execAsync(command, { cwd: '/app' });
+    res.json({ 
+      success: true, 
+      message: 'Compose services stopped',
+      output: stdout || stderr 
+    });
+  } catch (err) {
+    console.error('[Backend] Error stopping compose:', err);
+    res.status(500).json({ error: err.message, output: err.stderr });
+  }
+});
+
+// POST /api/compose/rebuild - Rebuild and start compose services
+app.post('/api/compose/rebuild', async (req, res) => {
+  try {
+    const { stdout, stderr } = await execAsync('docker compose up --build -d', { cwd: '/app' });
+    res.json({ 
+      success: true, 
+      message: 'Compose services rebuilt and started',
+      output: stdout || stderr 
+    });
+  } catch (err) {
+    console.error('[Backend] Error rebuilding compose:', err);
+    res.status(500).json({ error: err.message, output: err.stderr });
   }
 });
 

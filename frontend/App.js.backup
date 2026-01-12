@@ -1,0 +1,756 @@
+import React, { useEffect, useState } from 'react';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  FlatList, 
+  TouchableOpacity, 
+  ActivityIndicator, 
+  Modal, 
+  ScrollView,
+  RefreshControl,
+  SafeAreaView,
+  Animated,
+  Switch
+} from 'react-native';
+import axios from 'axios';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost/api';
+
+export default function App() {
+  const [containers, setContainers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedContainer, setSelectedContainer] = useState(null);
+  const [logs, setLogs] = useState('');
+  const [stats, setStats] = useState(null);
+  const [containerStats, setContainerStats] = useState({});
+  const [logsModal, setLogsModal] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [darkMode, setDarkMode] = useState(true);
+  const [glowAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    fetchContainers();
+    
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(() => {
+      if (autoRefresh) {
+        fetchContainers();
+      }
+    }, 5000);
+
+    // Glowing animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
+
+  const fetchContainers = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/containers`);
+      setContainers(res.data);
+      
+      // Fetch stats for running containers
+      const runningContainers = res.data.filter(c => c.state === 'running');
+      const statsPromises = runningContainers.map(container => 
+        axios.get(`${API_URL}/containers/${container.name}/stats`)
+          .then(statsRes => ({ name: container.name, stats: statsRes.data }))
+          .catch(() => ({ name: container.name, stats: null }))
+      );
+      
+      const allStats = await Promise.all(statsPromises);
+      const statsMap = {};
+      allStats.forEach(({ name, stats }) => {
+        if (stats) statsMap[name] = stats;
+      });
+      setContainerStats(statsMap);
+    } catch (e) {
+      console.error('Error fetching containers:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchLogsAndStats = async (container) => {
+    setSelectedContainer(container);
+    setLogsLoading(true);
+    setLogsModal(true);
+    
+    try {
+      // Fetch logs
+      const logsRes = await axios.get(`${API_URL}/containers/${container.name}/logs?tail=50`);
+      setLogs(logsRes.data.logs || 'No logs available');
+      
+      // Fetch stats if container is running
+      if (container.state === 'running') {
+        const statsRes = await axios.get(`${API_URL}/containers/${container.name}/stats`);
+        setStats(statsRes.data);
+      } else {
+        setStats(null);
+      }
+    } catch (e) {
+      console.error('Error fetching logs/stats:', e);
+      setLogs('Error fetching logs');
+      setStats(null);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const statusColor = (state) => {
+    if (state === 'running') return '#28a745';
+    if (state === 'exited') return '#dc3545';
+    if (state === 'restarting') return '#ffc107';
+    return '#6c757d';
+  };
+
+  const getContainerIcon = (name) => {
+    if (name.includes('express')) return { icon: '⚡', name: 'Express API', color: darkMode ? '#00ff41' : '#28a745' };
+    if (name.includes('dotnet')) return { icon: '◆', name: '.NET Core', color: darkMode ? '#00d9ff' : '#512bd4' };
+    if (name.includes('nextjs')) return { icon: '▲', name: 'Next.js', color: darkMode ? '#00ffff' : '#000000' };
+    if (name.includes('mongodb')) return { icon: '🍃', name: 'MongoDB', color: darkMode ? '#00ff88' : '#47a248' };
+    if (name.includes('postgresql')) return { icon: '🐘', name: 'PostgreSQL', color: darkMode ? '#00b4ff' : '#336791' };
+    return { icon: '■', name: name, color: darkMode ? '#00ff41' : '#666' };
+  };
+
+  const parsePercentage = (percentStr) => {
+    return parseFloat(percentStr?.replace('%', '') || '0');
+  };
+
+  const ProgressBar = ({ value, max = 100, color, label, darkMode }) => {
+    const percentage = (value / max) * 100;
+    const glowColor = percentage > 80 ? (darkMode ? '#ff0040' : '#dc3545') : 
+                      percentage > 50 ? (darkMode ? '#ffaa00' : '#ffc107') : 
+                      (darkMode ? '#00ff41' : '#28a745');
+    
+    return (
+      <View style={styles.progressContainer}>
+        <View style={styles.progressInfo}>
+          <Text style={[styles.progressLabel, darkMode && styles.darkText]}>{label}</Text>
+          <Text style={[styles.progressValue, darkMode && styles.darkTextBright, { color: glowColor }]}>
+            {typeof value === 'number' ? `${value.toFixed(1)}%` : value}
+          </Text>
+        </View>
+    const containerInfo = getContainerIcon(item.name);
+    const isRunning = item.state === 'running';
+    const glowOpacity = glowAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.3, 1],
+    });
+    
+    return (
+      <TouchableOpacity 
+        style={[
+          styles.containerCard,
+          darkMode && styles.containerCardDark,
+          isRunning && darkMode && styles.containerCardRunning
+        ]}
+        onPress={() => fetchLogsAndStats(item)}
+      >
+        <View style={styles.containerHeader}>
+          <View style={styles.containerInfo}>
+            <Animated.Text 
+              style={[
+                styles.containerIcon,
+                { color: containerInfo.color, opacity: isRunning ? glowOpacity : 1 }
+              ]}
+            >
+              {containerInfo.icon}
+            </Animated.Text>
+            <View>
+              <Text style={[styles.containerName, darkMode && styles.darkTextBright]}>
+                {containerInfo.name}
+              </Text>
+              <Text style={[styles.containerImage, darkMode && styles.darkTextMuted]}>
+                {item.image}
+              </Text>
+            </View>
+          </View>
+          <View style={[styles.statusBadge, { 
+            backgroundColor: statusColor(item.state),
+            borderColor: statusColor(item.state),
+            borderWidth: darkMode ? 1 : 0,
+          }]}>
+            <Text style={styles.statusText}>{item.state.toUpperCase()}</Text>
+          </View>
+        </View>
+        
+        {itemStats && isRunning && (
+          <View style={[styles.statsSection, darkMode && styles.statsSectionDark]}>
+            <ProgressBar 
+              value={parsePercentage(itemStats.cpu)} 
+              label="CPU Usage"
+              darkMode={darkMode}
+            />
+            <ProgressBar 
+              value={parsePercentage(itemStats.memory.percent)} 
+              label="Memory Usage"
+              darkMode={darkMode}
+            />
+          </View>
+        )}
+        
+        {item.ports && item.ports.length > 0 && (
+          <View style={[styles.portsContainer, darkMode && styles.portsContainerDark]}>
+            <Text style={[styles.portsTitle, darkMode && styles.darkTextMuted]}>
+              PORTS: {item.ports.map(p => p.public || p.private).filter(Boolean).join(', ')}
+            </Text>styles.containerCard}
+        onPress={() => fetchLogsAndStats(item)}
+      >
+        <View style={styles.containerHeader}>
+          <View style={styles.containerInfo}>
+            <Text style={styles.containerName}>{getContainerIcon(item.name)}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor(item.state) }]}>
+              <Text style={styles.statusText}>{item.state.toUpperCase()}</Text>
+            </View>
+          </View>
+        </View>
+        
+        <Text style={styles.containerImage}>Image: {item.image}</Text>
+        <Text style={styles.containerStatus}>{item.status}</Text>
+        
+        {itemStats && item.state === 'running' && (
+          <View style={styles.statsPreview}>
+            <View style={styles.statItem}>
+              <Text style={styles.statIcon}>⚡</Text>
+              <Text style={styles.statLabel}>CPU:</Text>
+              <Text style={styles.statValueSmall}>{itemStats.cpu}</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statIcon}>💾</Text>
+              <Text style={styles.statLabel}>Memory:</Text>
+              <Text style={styles.statValueSmall}>{itemStats.memory.percent}</Text>
+            </View>
+          </View>
+  const theme = darkMode ? styles : styles;
+
+  return (
+    <SafeAreaView style={[styles.screen, darkMode && styles.screenDark]}>
+      <View style={[styles.header, darkMode && styles.headerDark]}>
+        <View style={styles.headerTop}>
+          <Animated.Text style={[styles.title, darkMode && styles.titleDark, { opacity: glowAnim }]}>
+            ▸ DOCKER MONITOR
+          </Animated.Text>
+          <View style={styles.modeToggle}>
+            <Text style={[styles.modeLabel, darkMode && styles.darkTextMuted]}>
+              {darkMode ? '🌙' : '☀️'}
+            </Text>
+            <Switch
+              value={darkMode}
+              onValueChange={setDarkMode}
+              trackColor={{ false: '#767577', true: '#00ff41' }}
+              thumbColor={darkMode ? '#0a0' : '#f4f3f4'}
+            />
+          </View>
+        </View>
+        <Text style={[styles.subtitle, darkMode && styles.subtitleDark]}>
+          <Text style={darkMode && { color: '#00ff41' }}>[</Text>
+          BJIT-NETWORK
+          <Text style={darkMode && { color: '#00ff41' }}>]</Text>
+          {' '}{containers.length} ACTIVE CONTAINERS
+        </Text>
+        <TouchableOpacity 
+          style={[styles.refreshToggle, darkMode && styles.refreshToggleDark]}
+          onPress={() => setAutoRefresh(!autoRefresh)}
+        >
+          <Text style={[styles.refreshText, darkMode && styles.darkTextBright]}>
+            {autoRefresh ? '◉ AUTO-REFRESH' : '◯ MANUAL
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const closeModal = () => {
+    setLoView style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={darkMode ? "#00ff41" : "#007bff"} />
+          <Text style={[styles.loadingText, darkMode && styles.darkTextBright]}>
+            SCANNING NETWORK...
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={containers}
+          keyExtractor={item => item.id}
+          renderItem={renderContainer}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl 
+              refreshing={loading} 
+              onRefresh={fetchContainers}
+              tintColor={darkMode ? "#00ff41" : "#007bff"}
+            />
+          }
+          ListEmptyComponent={
+            <Text style={[styles.emptyText, darkMode && styles.darkTextMuted]}>
+              NO CONTAINERS DETECTED
+            
+          style={styles.refreshToggle}
+          onPress={() => setAutoRefresh(!autoRefresh)}
+        >
+          <Text style={styles.refreshText}>
+            Auto-refresh: {autoRefresh ? '✅' : '❌'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      
+      {loading ? (
+        <ActivityIndicator size="large" color="#007bff" style={styles.loader} />
+      ) : (
+        <FlatList
+          data={containers}
+          keyExtractor={item => item.id}
+          renderItem={renderContainer}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={fetchContainers} />
+          }
+          ListEmptyComponent={
+            <Text style={styl[styles.modalContainer, darkMode && styles.modalContainerDark]}>
+          <View style={[styles.modalHeader, darkMode && styles.modalHeaderDark]}>
+            <Text style={[styles.modalTitle, darkMode && styles.darkTextBright]}>
+              {selectedContainer ? `▸ ${getContainerIcon(selectedContainer.name).name.toUpperCase()}` : '▸ CONTAINER DETAILS'}
+            </Text>
+            <TouchableOpacity 
+              style={[styles.closeButton, darkMode && styles.closeButtonDark]} 
+              onPress={closeModal}
+            >
+              <Text style={styles.closeButtonText}>✕ CLOSE
+        animationType="slide" 
+        onReqView style={styles.loaderContainer}>
+              <ActivityIndicator size="large" color={darkMode ? "#00ff41" : "#007bff"} />
+              <Text style={[styles.loadingText, darkMode && styles.darkTextBright]}>
+                FETCHING DATA...
+              </Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.modalContent}>
+              {stats && (
+                <View style={[styles.statsContainer, darkMode && styles.statsContainerDark]}>
+                  <Text style={[styles.statsTitle, darkMode && styles.darkTextBright]}>
+                    ◆ RESOURCE MONITORING
+                  </Text>
+                  <ProgressBar 
+                    value={parsePercentage(stats.cpu)} 
+                    label="CPU Usage"
+                    darkMode={darkMode}
+                  />
+                  <ProgressBar 
+                    value={parsePercentage(stats.memory.percent)} 
+                    label="Memory Usage"
+                    darkMode={darkMode}
+                  />
+                  <Text style={[styles.memoryDetails, darkMode && styles.darkTextMuted]}>
+                    {stats.memory.usage} / {stats.memory.limit}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.logsContainer}>
+                <Text style={[styles.logsTitle, darkMode && styles.darkTextBright]}>
+                  ◆ CONTAINER LOGS [LAST 50 LINES]
+                </Text>
+                <ScrollView 
+                  style={[styles.logsBox, darkMode && styles.logsBoxDark]}
+                  horizontal={true}
+                  nestedScrollEnabled={true}
+                >
+                  <Text style={[styles.logsText, darkMode && styles.logsTextDark]lue}>
+                      {stats.memory.usage} / {stats.memory.limit} ({stats.memory.percent})
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.logsContainer}>
+                <Text style={styles.logsTitle}>📝 Container Logs (Last 50 lines)</Text>
+                <ScrollView 
+                  style={styles.logsBox}
+                  horizontal={true}
+                  nestedScrollEnabled={true}
+                >0f2f5',
+  },
+  screenDark: {
+    backgroundColor: '#0a0a0a',
+  },
+  header: {
+    backgroundColor: '#ffffff',
+    padding: 20,
+    paddingTop: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  headerDark: {
+    backgroundColor: '#0d0d0d',
+    borderBottomColor: '#00ff41',
+    borderBottomWidth: 2,
+    shadowColor: '#00ff41',
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 's#e0e0e0',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginTop: 5,
+    alignItems: 'center',
+  },
+  refreshToggleDark: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#00ff41',
+  },
+  refreshText: {
+    color: '#333',
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+    fontFamily: 'monospace',
+  },fff',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    marginHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  containerCardDark: {
+    backgroundColor: '#111111',
+    borderColor: '#1a1a1a',
+    shadowColor: '#00ff41',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  containerCardRunning: {
+    borderColor: '#00ff41',
+    borderWidth: 1,
+    color: '#666',
+    fontFamily: 'monospace',
+    letterSpacing: 2
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    letterSpacing: 2,
+    fontFamily: 'monospace',
+  },
+  titleDark: {
+    color: '#00ff41',
+    textShadowColor: '#00ff41',
+    textSh2,
+    flex: 1,
+  },
+  containerIcon: {
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  containerName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    fontFamily: 'monospace',
+    letterSpacing: 1,
+    marginBottom: 10,
+    fontFamily: 'monospace',
+    letterSpacing: 1,
+  },
+  subtitleDark: {
+    color: '#0a0'
+    backgroundColor: '#007bff',
+    padding: 20,
+    paddingTop: 10,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#e3f2fd',
+    marginBottom: 10,
+  },
+  refreshToggle: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    marginTop: 5,
+  },
+  refreshText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  loader: {
+    marginTop: 50,
+  },
+  listContainer: {
+    padding: 10,
+  },
+  containerCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  contaSection: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  statsSectionDark: {
+    backgroundColor: '#0d0d0d',
+    borderColor: '#1a1a1a',
+  },
+  progressContainer: {
+    marginBottom: 12,
+  },
+  progressInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  progressLabel: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '600',
+    fontFamily: 'monospace',
+    letterSpacing: 0.5,
+  },
+  progressValue: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarBgDark: {
+    backgroundColor: '#1a1a1a',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  containerStatus: {
+    fontSize: 11,
+    color: '#999',
+    marginBottom: 12,
+    fontFamily: 'monospace',
+  statIcon: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#0d47a1',
+    fontWeight: '600',
+    marginRight: 4,
+  },12,
+    padding: 8,
+    backgroundColor: '#f0f2f5',
+    borderRadius: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#007bff',
+  },
+  portsContainerDark: {
+    backgroundColor: '#0d0d0d',
+    borderLeftColor: '#00ff41',
+  },
+  portsTitle: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#666',
+    fontFamily: 'monospace',
+    letterSpacing: 1
+  },
+  containerImag4,
+    color: '#999',
+    marginTop: 50,
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+  },
+  darkText: {
+    color: '#ccc',
+  },
+  darkTextMuted: {
+    color: '#666',
+  },
+  darkTextBright: {
+    color: '#00ff41',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalContainerDark: {
+    backgroundColor: '#0a0a0a',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems16,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    flex: 1,
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+  },
+  closeButton: {
+    backgroundColor: '#e0e0e0',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  closeButtonDark: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#00ff41',
+  },
+  closeButtonText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 11,
+    fontFamily: 'monospace',
+    letterSpacing: 1,
+    fontWeight: 'bold',
+    color: '#495057',f8f9fa',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 15,
+    marginHorizontal: 15,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  statsContainerDark: {
+    backgroundColor: '#0d0d0d',
+    borderColor: '#1a1a1a',
+  },
+  statsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 15,
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+  },
+  memoryDetails: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 8,
+    fontFamily: 'monospace',
+    textAlign: 'center
+    borderBottomColor: '#0056b3',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    flex: 1,
+  },
+  closeButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginHorizontal: 15,
+  },
+  logsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 10,
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+  },
+  logsBox: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 6,
+    padding: 12,
+    minHeight: 400,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  logsBoxDark: {
+    backgroundColor: '#000000',
+    borderColor: '#1a1a1a',
+  },
+  logsText: {
+    color: '#333',
+    fontFamily: 'monospace',
+    fontSize: 11,
+    lineHeight: 18,
+  },
+  logsTextDark: {
+    color: '#00ff41'
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#1565c0',
+    fontWeight: '600',
+  },
+  statValue: {
+    fontSize: 14,
+    color: '#424242',
+    fontFamily: 'monospace',
+  },
+  logsContainer: {
+    flex: 1,
+  },
+  logsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  logsBox: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 400,
+  },
+  logsText: {
+    color: '#d4d4d4',
+    fontFamily: 'monospace',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+});
