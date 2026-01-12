@@ -328,6 +328,72 @@ app.post('/api/compose/rebuild', async (req, res) => {
   }
 });
 
+// GET /api/system/stats - Get host machine system stats
+app.get('/api/system/stats', async (req, res) => {
+  try {
+    // Get CPU stats from /proc/stat
+    const { stdout: cpuInfo } = await execAsync("cat /proc/stat | grep '^cpu ' | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'");
+    const cpuUsage = parseFloat(cpuInfo.trim()) || 0;
+
+    // Get memory stats from /proc/meminfo
+    const { stdout: memInfo } = await execAsync("cat /proc/meminfo | grep -E 'MemTotal|MemAvailable' | awk '{print $2}'");
+    const memLines = memInfo.trim().split('\n');
+    const memTotal = parseInt(memLines[0]) || 0;
+    const memAvailable = parseInt(memLines[1]) || 0;
+    const memUsed = memTotal - memAvailable;
+    const memPercent = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
+
+    // Get disk stats
+    const { stdout: diskInfo } = await execAsync("df -h / | tail -1 | awk '{print $2,$3,$5}'");
+    const diskParts = diskInfo.trim().split(' ');
+    
+    // Get number of CPU cores
+    const { stdout: cpuCores } = await execAsync("nproc");
+    const cores = parseInt(cpuCores.trim()) || 1;
+
+    // Get hostname
+    const { stdout: hostname } = await execAsync("hostname");
+
+    // Get CPU model
+    const { stdout: cpuModel } = await execAsync("cat /proc/cpuinfo | grep 'model name' | head -1 | cut -d ':' -f2 | xargs").catch(() => ({ stdout: 'Unknown CPU' }));
+
+    // Get platform and architecture
+    const { stdout: platform } = await execAsync("uname -s").catch(() => ({ stdout: 'Linux' }));
+    const { stdout: arch } = await execAsync("uname -m").catch(() => ({ stdout: 'x86_64' }));
+
+    // Get uptime in minutes
+    const { stdout: uptimeSeconds } = await execAsync("cat /proc/uptime | cut -d ' ' -f1").catch(() => ({ stdout: '0' }));
+    const uptime = Math.floor(parseFloat(uptimeSeconds.trim()) / 60);
+
+    res.json({
+      hostname: hostname.trim(),
+      platform: platform.trim(),
+      arch: arch.trim(),
+      cpu: {
+        model: cpuModel.trim(),
+        percent: cpuUsage.toFixed(2) + '%',
+        cores: cores
+      },
+      memory: {
+        total: (memTotal / 1024 / 1024).toFixed(2) + ' GB',
+        used: (memUsed / 1024 / 1024).toFixed(2) + ' GB',
+        available: (memAvailable / 1024 / 1024).toFixed(2) + ' GB',
+        percent: memPercent.toFixed(2) + '%'
+      },
+      disk: {
+        total: diskParts[0] || 'N/A',
+        used: diskParts[1] || 'N/A',
+        percent: diskParts[2] || 'N/A'
+      },
+      uptime: uptime,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[Backend] Error fetching system stats:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 

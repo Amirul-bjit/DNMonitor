@@ -24,6 +24,7 @@ export default function App() {
   const [logs, setLogs] = useState('');
   const [stats, setStats] = useState(null);
   const [containerStats, setContainerStats] = useState({});
+  const [systemStats, setSystemStats] = useState(null);
   const [logsModal, setLogsModal] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -35,12 +36,17 @@ export default function App() {
 
   useEffect(() => {
     fetchContainers();
+    fetchSystemStats();
     
     const interval = setInterval(() => {
       if (autoRefresh) {
         fetchContainers();
       }
     }, 5000);
+    
+    const systemInterval = setInterval(() => {
+      fetchSystemStats();
+    }, 1000);
 
     Animated.loop(
       Animated.sequence([
@@ -57,7 +63,10 @@ export default function App() {
       ])
     ).start();
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearInterval(systemInterval);
+    };
   }, [autoRefresh]);
 
   const fetchContainers = async () => {
@@ -82,6 +91,15 @@ export default function App() {
       console.error('Error fetching containers:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSystemStats = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/system/stats`);
+      setSystemStats(res.data);
+    } catch (e) {
+      console.error('Error fetching system stats:', e);
     }
   };
 
@@ -289,68 +307,69 @@ export default function App() {
         )}
         
         <View style={[styles.containerActions, darkMode && styles.containerActionsDark]}>
-          {isRunning && (
+          <View style={styles.buttonRow}>
+            {isRunning ? (
+              <>
+                <TouchableOpacity 
+                  style={[styles.actionButton, darkMode && styles.actionButtonDark]}
+                  onPress={(e) => { 
+                    e.stopPropagation(); 
+                    showConfirmation(
+                      'STOP CONTAINER',
+                      `Stop ${item.name}?\n\nThe container will be stopped but not removed.`,
+                      () => handleContainerAction(item.name, 'stop')
+                    );
+                  }}
+                  disabled={actionLoading}
+                >
+                  <Text style={[styles.actionButtonText, darkMode && styles.darkTextBright]}>■ STOP</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionButton, darkMode && styles.actionButtonDark]}
+                  onPress={(e) => { 
+                    e.stopPropagation(); 
+                    showConfirmation(
+                      'RESTART CONTAINER',
+                      `Restart ${item.name}?\n\nThe container will be stopped and started again.`,
+                      () => handleContainerAction(item.name, 'restart')
+                    );
+                  }}
+                  disabled={actionLoading}
+                >
+                  <Text style={[styles.actionButtonText, darkMode && styles.darkTextBright]}>↻ RESTART</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity 
+                style={[styles.actionButton, darkMode && styles.actionButtonDark]}
+                onPress={(e) => { 
+                  e.stopPropagation(); 
+                  showConfirmation(
+                    'START CONTAINER',
+                    `Start ${item.name}?`,
+                    () => handleContainerAction(item.name, 'start')
+                  );
+                }}
+                disabled={actionLoading}
+              >
+                <Text style={[styles.actionButtonText, darkMode && styles.darkTextBright]}>▶ START</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity 
-              style={[styles.actionButton, darkMode && styles.actionButtonDark]}
+              style={[styles.actionButton, styles.deleteButtonStyle, darkMode && styles.deleteButtonDark]}
               onPress={(e) => { 
                 e.stopPropagation(); 
                 showConfirmation(
-                  'STOP CONTAINER',
-                  `Stop ${item.name}?\n\nThe container will be stopped but not removed.`,
-                  () => handleContainerAction(item.name, 'stop')
+                  'DELETE CONTAINER',
+                  `Are you sure you want to delete ${item.name} with all volumes?\n\nThis action cannot be undone.`,
+                  () => handleContainerAction(item.name, 'delete')
                 );
               }}
               disabled={actionLoading}
             >
-              <Text style={[styles.actionButtonText, darkMode && styles.darkTextBright]}>■ STOP</Text>
+              <Text style={[styles.actionButtonText, darkMode && styles.deleteButtonTextDark]}>🗑 DELETE</Text>
             </TouchableOpacity>
-          )}
-          {isRunning && (
-            <TouchableOpacity 
-              style={[styles.actionButton, darkMode && styles.actionButtonDark]}
-              onPress={(e) => { 
-                e.stopPropagation(); 
-                showConfirmation(
-                  'RESTART CONTAINER',
-                  `Restart ${item.name}?\n\nThe container will be stopped and started again.`,
-                  () => handleContainerAction(item.name, 'restart')
-                );
-              }}
-              disabled={actionLoading}
-            >
-              <Text style={[styles.actionButtonText, darkMode && styles.darkTextBright]}>↻ RESTART</Text>
-            </TouchableOpacity>
-          )}
-          {!isRunning && (
-            <TouchableOpacity 
-              style={[styles.actionButton, darkMode && styles.actionButtonDark]}
-              onPress={(e) => { 
-                e.stopPropagation(); 
-                showConfirmation(
-                  'START CONTAINER',
-                  `Start ${item.name}?`,
-                  () => handleContainerAction(item.name, 'start')
-                );
-              }}
-              disabled={actionLoading}
-            >
-              <Text style={[styles.actionButtonText, darkMode && styles.darkTextBright]}>▶ START</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.deleteButtonStyle, darkMode && styles.deleteButtonDark]}
-            onPress={(e) => { 
-              e.stopPropagation(); 
-              showConfirmation(
-                'DELETE CONTAINER',
-                `Are you sure you want to delete ${item.name} with all volumes?\n\nThis action cannot be undone.`,
-                () => handleContainerAction(item.name, 'delete')
-              );
-            }}
-            disabled={actionLoading}
-          >
-            <Text style={[styles.actionButtonText, darkMode && styles.deleteButtonTextDark]}>🗑 DELETE</Text>
-          </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -444,6 +463,55 @@ export default function App() {
           </View>
         )}
       </View>
+      
+      {systemStats && (
+        <View style={[styles.systemStatsCard, darkMode && styles.systemStatsCardDark]}>
+          <View style={styles.systemStatsHeader}>
+            <Text style={[styles.systemStatsTitle, darkMode && styles.darkTextBright]}>
+              &gt; DOCKER HOST SYSTEM
+            </Text>
+            <View style={styles.systemInfo}>
+              <Text style={[styles.systemInfoText, darkMode && styles.darkTextMuted]}>
+                {systemStats.hostname} | {systemStats.platform} {systemStats.arch}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.systemStatsGrid}>
+            <View style={[styles.systemStatItem, darkMode && styles.systemStatItemDark]}>
+              <View style={styles.statHeader}>
+                <Text style={[styles.statLabel, darkMode && styles.darkTextMuted]}>CPU</Text>
+                <Text style={[styles.statResource, darkMode && styles.darkText]}>
+                  {systemStats.cpu.model} ({systemStats.cpu.cores} cores)
+                </Text>
+              </View>
+              <ProgressBar 
+                value={parsePercentage(systemStats.cpu.percent)} 
+                label="CPU Usage"
+                darkMode={darkMode}
+              />
+            </View>
+            
+            <View style={[styles.systemStatItem, darkMode && styles.systemStatItemDark]}>
+              <View style={styles.statHeader}>
+                <Text style={[styles.statLabel, darkMode && styles.darkTextMuted]}>MEMORY</Text>
+                <Text style={[styles.statResource, darkMode && styles.darkText]}>
+                  {systemStats.memory.used} / {systemStats.memory.total}
+                </Text>
+              </View>
+              <ProgressBar 
+                value={parsePercentage(systemStats.memory.percent)} 
+                label="Memory Usage"
+                darkMode={darkMode}
+              />
+            </View>
+          </View>
+          
+          <Text style={[styles.systemUptime, darkMode && styles.darkTextMuted]}>
+            UPTIME: {systemStats.uptime} minutes
+          </Text>
+        </View>
+      )}
       
       {loading ? (
         <View style={styles.loaderContainer}>
@@ -623,6 +691,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    letterSpacing: 2,
+    fontFamily: 'monospace',
+  },
+  titleDark: {
+    color: '#00ff41',
+    textShadowColor: '#00ff41',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
   composeButton: {
     backgroundColor: '#007bff',
     paddingHorizontal: 16,
@@ -676,14 +755,85 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   containerActions: {
-    flexDirection: 'row',
     marginTop: 12,
-    gap: 8,
   },
   containerActionsDark: {
     borderTopWidth: 1,
     borderTopColor: '#1a1a1a',
     paddingTop: 12,
+  },
+  systemStatsContainer: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    marginHorizontal: 10,
+    marginTop: 10,
+    marginBottom: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  systemStatsContainerDark: {
+    backgroundColor: '#0d0d0d',
+    borderColor: '#00ff41',
+    borderWidth: 2,
+    shadowColor: '#00ff41',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  systemStatsTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 12,
+    fontFamily: 'monospace',
+    letterSpacing: 1.5,
+  },
+  systemStatsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  systemStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  systemStatLabel: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#666',
+    marginBottom: 4,
+    fontFamily: 'monospace',
+    letterSpacing: 1,
+  },
+  systemStatValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#00ff41',
+    marginBottom: 2,
+    fontFamily: 'monospace',
+  },
+  systemStatDetail: {
+    fontSize: 7,
+    color: '#666',
+    marginBottom: 6,
+    fontFamily: 'monospace',
+    textAlign: 'center',
+  },
+  miniProgressBar: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  miniProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   actionButton: {
     backgroundColor: '#e0e0e0',
@@ -707,11 +857,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: 'monospace',
     letterSpacing: 1,
-  },
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    letterSpacing: 2,
-    fontFamily: 'monospace',
   },
   titleDark: {
     color: '#00ff41',
@@ -1124,5 +1269,82 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     letterSpacing: 1,
     color: '#fff',
+  },
+  systemStatsCard: {
+    backgroundColor: '#ffffff',
+    marginHorizontal: 10,
+    marginTop: 10,
+    marginBottom: 5,
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#007bff',
+  },
+  systemStatsCardDark: {
+    backgroundColor: '#0d0d0d',
+    borderColor: '#00ff41',
+    shadowColor: '#00ff41',
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  systemStatsHeader: {
+    marginBottom: 16,
+  },
+  systemStatsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+    marginBottom: 6,
+  },
+  systemInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  systemInfoText: {
+    fontSize: 9,
+    color: '#666',
+    fontFamily: 'monospace',
+    letterSpacing: 1,
+  },
+  systemStatsGrid: {
+    gap: 12,
+  },
+  systemStatItem: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 6,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  systemStatItemDark: {
+    backgroundColor: '#0a0a0a',
+    borderColor: '#1a1a1a',
+  },
+  statHeader: {
+    marginBottom: 8,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#666',
+    fontFamily: 'monospace',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  statResource: {
+    fontSize: 9,
+    color: '#888',
+    fontFamily: 'monospace',
+  },
+  systemUptime: {
+    fontSize: 9,
+    color: '#666',
+    fontFamily: 'monospace',
+    textAlign: 'center',
+    marginTop: 12,
+    letterSpacing: 1,
   },
 });
