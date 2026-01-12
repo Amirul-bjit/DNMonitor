@@ -1,25 +1,85 @@
-version: '3.8'
 services:
-  nginx:
-    build: ./nginx
-    container_name: dnmonitor-nginx
+  # Mock Projects to Monitor
+  express-api:
+    build: ./mock-projects/express-api
+    container_name: express-api
+    networks:
+      - bjit-network
     ports:
-      - "80:80"
-    depends_on:
-      - backend
-      - frontend
+      - "3000:3000"
     restart: unless-stopped
+
+  dotnet-api:
+    build: ./mock-projects/dotnet-api
+    container_name: dotnet-api
+    networks:
+      - bjit-network
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  nextjs-app:
+    build: ./mock-projects/nextjs-app
+    container_name: nextjs-app
+    networks:
+      - bjit-network
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7-jammy
+    container_name: mongodb
+    networks:
+      - bjit-network
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=testdb
+    volumes:
+      - ./mock-projects/mongodb-init:/docker-entrypoint-initdb.d
+      - mongodb-data:/data/db
+    restart: unless-stopped
+
+  postgresql:
+    image: postgres:16-alpine
+    container_name: postgresql
+    networks:
+      - bjit-network
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin123
+      - POSTGRES_DB=testdb
+    volumes:
+      - ./mock-projects/postgresql-init:/docker-entrypoint-initdb.d
+      - postgresql-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Monitoring System
   backend:
     build: ./backend
     container_name: dnmonitor-backend
+    networks:
+      - bjit-network
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    expose:
-      - "4000"
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "4000:4000"
+    depends_on:
+      - express-api
+      - dotnet-api
+      - nextjs-app
+      - mongodb
+      - postgresql
     restart: unless-stopped
+
   frontend:
     build: ./frontend
     container_name: dnmonitor-frontend
+    networks:
+      - bjit-network
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -35,3 +95,24 @@ services:
     stdin_open: true
     tty: true
     restart: unless-stopped
+
+  nginx:
+    build: ./nginx
+    container_name: dnmonitor-nginx
+    networks:
+      - bjit-network
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+networks:
+  bjit-network:
+    driver: bridge
+    name: bjit-network
+
+volumes:
+  mongodb-data:
+  postgresql-data:
