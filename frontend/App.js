@@ -14,10 +14,15 @@ import {
   Switch
 } from 'react-native';
 import axios from 'axios';
+import { AuthProvider, useAuth } from './AuthContext';
+import LoginScreen from './LoginScreen';
+import LogoutButton from './LogoutButton';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api';
 
-export default function App() {
+// Main authenticated app component
+function AuthenticatedApp() {
+  const { user } = useAuth();
   const [containers, setContainers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedContainer, setSelectedContainer] = useState(null);
@@ -389,16 +394,19 @@ export default function App() {
           <Animated.Text style={[styles.title, darkMode && styles.titleDark, { opacity: glowAnim }]}>
             &gt; DOCKER MONITOR
           </Animated.Text>
-          <View style={styles.modeToggle}>
-            <Text style={[styles.modeLabel, darkMode && styles.darkTextMuted]}>
-              {darkMode ? 'DARK' : 'LIGHT'}
-            </Text>
-            <Switch
-              value={darkMode}
-              onValueChange={setDarkMode}
-              trackColor={{ false: '#767577', true: '#00ff41' }}
-              thumbColor={darkMode ? '#0a0' : '#f4f3f4'}
-            />
+          <View style={styles.headerControls}>
+            <LogoutButton style={{ marginRight: 15 }} />
+            <View style={styles.modeToggle}>
+              <Text style={[styles.modeLabel, darkMode && styles.darkTextMuted]}>
+                {darkMode ? 'DARK' : 'LIGHT'}
+              </Text>
+              <Switch
+                value={darkMode}
+                onValueChange={setDarkMode}
+                trackColor={{ false: '#767577', true: '#00ff41' }}
+                thumbColor={darkMode ? '#0a0' : '#f4f3f4'}
+              />
+            </View>
           </View>
         </View>
         <Text style={[styles.subtitle, darkMode && styles.subtitleDark]}>
@@ -678,6 +686,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+  },
+  headerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modeToggle: {
     flexDirection: 'row',
@@ -1348,3 +1360,28 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 });
+
+// Main App component with authentication wrapper
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+// Content component that handles auth state
+function AppContent() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+        <ActivityIndicator size="large" color="#00ffff" />
+        <Text style={{ color: '#00ffff', marginTop: 20, fontSize: 16 }}>Initializing DNMonitor...</Text>
+      </View>
+    );
+  }
+
+  return isAuthenticated ? <AuthenticatedApp /> : <LoginScreen />;
+}

@@ -3,14 +3,134 @@ import Docker from 'dockerode';
 import cors from 'cors';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
 const execAsync = promisify(exec);
 const app = express();
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
+// JWT Configuration
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+const JWT_EXPIRES_IN = '24h';
+
+// Hardcoded users with hashed passwords
+// Default password for all users: "admin123"
+const USERS = [
+  {
+    id: 1,
+    username: 'admin',
+    email: 'admin@dnmonitor.com',
+    // Hash of "admin123"
+    passwordHash: '$2a$10$Bf8Oct.9rtt9GaH0M8C8X.XceIiLvBzPud4SqG4Cuj5Iz6d2cQW.e',
+    role: 'admin'
+  },
+  {
+    id: 2,
+    username: 'monitor',
+    email: 'monitor@dnmonitor.com',
+    // Hash of "admin123"
+    passwordHash: '$2a$10$Bf8Oct.9rtt9GaH0M8C8X.XceIiLvBzPud4SqG4Cuj5Iz6d2cQW.e',
+    role: 'viewer'
+  }
+];
+
+// Authentication middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+app.use(cors({
+  origin: [
+    'http://localhost:8081',
+    'http://localhost:8082',
+    'http://localhost:19000',
+    'http://localhost:19001',
+    'http://localhost:19002'
+  ],
+  credentials: true
+}));
 app.use(express.json());
+
+// Authentication routes
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    // Find user
+    const user = USERS.find(u => u.username === username || u.email === username);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        username: user.username, 
+        email: user.email,
+        role: user.role 
+      },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    console.error('[Auth] Login error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/verify', authenticateToken, (req, res) => {
+  res.json({ 
+    success: true, 
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      email: req.user.email,
+      role: req.user.role
+    }
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  // Since JWT is stateless, logout is handled client-side
+  res.json({ success: true, message: 'Logged out successfully' });
+});
 
 // Containers to monitor in bjit-network
 const MONITORED_CONTAINERS = [
@@ -22,7 +142,7 @@ const MONITORED_CONTAINERS = [
 ];
 
 // GET /api/containers - Get all monitored containers with their status
-app.get('/api/containers', async (req, res) => {
+app.get('/api/containers', authenticateToken, async (req, res) => {
   try {
     const containers = await docker.listContainers({ all: true });
     
@@ -51,7 +171,7 @@ app.get('/api/containers', async (req, res) => {
 });
 
 // GET /api/containers/:nameOrId/logs - Get logs for a specific container
-app.get('/api/containers/:nameOrId/logs', async (req, res) => {
+app.get('/api/containers/:nameOrId/logs', authenticateToken, async (req, res) => {
   try {
     const nameOrId = req.params.nameOrId;
     const tail = req.query.tail || 100;
@@ -97,7 +217,7 @@ app.get('/api/containers/:nameOrId/logs', async (req, res) => {
 });
 
 // GET /api/containers/:nameOrId/stats - Get real-time stats for a container
-app.get('/api/containers/:nameOrId/stats', async (req, res) => {
+app.get('/api/containers/:nameOrId/stats', authenticateToken, async (req, res) => {
   try {
     const nameOrId = req.params.nameOrId;
     
@@ -139,7 +259,7 @@ app.get('/api/containers/:nameOrId/stats', async (req, res) => {
 });
 
 // GET /api/containers/:nameOrId - Get detailed info about a container
-app.get('/api/containers/:nameOrId', async (req, res) => {
+app.get('/api/containers/:nameOrId', authenticateToken, async (req, res) => {
   try {
     const nameOrId = req.params.nameOrId;
     
@@ -172,7 +292,7 @@ app.get('/api/containers/:nameOrId', async (req, res) => {
 });
 
 // POST /api/containers/:nameOrId/start - Start a container
-app.post('/api/containers/:nameOrId/start', async (req, res) => {
+app.post('/api/containers/:nameOrId/start', authenticateToken, async (req, res) => {
   try {
     const nameOrId = req.params.nameOrId;
     
@@ -196,7 +316,7 @@ app.post('/api/containers/:nameOrId/start', async (req, res) => {
 });
 
 // POST /api/containers/:nameOrId/stop - Stop a container
-app.post('/api/containers/:nameOrId/stop', async (req, res) => {
+app.post('/api/containers/:nameOrId/stop', authenticateToken, async (req, res) => {
   try {
     const nameOrId = req.params.nameOrId;
     
@@ -220,7 +340,7 @@ app.post('/api/containers/:nameOrId/stop', async (req, res) => {
 });
 
 // POST /api/containers/:nameOrId/restart - Restart a container
-app.post('/api/containers/:nameOrId/restart', async (req, res) => {
+app.post('/api/containers/:nameOrId/restart', authenticateToken, async (req, res) => {
   try {
     const nameOrId = req.params.nameOrId;
     
@@ -244,7 +364,7 @@ app.post('/api/containers/:nameOrId/restart', async (req, res) => {
 });
 
 // DELETE /api/containers/:nameOrId - Remove a container with volumes
-app.delete('/api/containers/:nameOrId', async (req, res) => {
+app.delete('/api/containers/:nameOrId', authenticateToken, async (req, res) => {
   try {
     const nameOrId = req.params.nameOrId;
     const { volumes } = req.query;
@@ -279,7 +399,7 @@ app.delete('/api/containers/:nameOrId', async (req, res) => {
 });
 
 // POST /api/compose/up - Start all compose services
-app.post('/api/compose/up', async (req, res) => {
+app.post('/api/compose/up', authenticateToken, async (req, res) => {
   try {
     const { stdout, stderr } = await execAsync('docker compose up -d', { cwd: '/app' });
     res.json({ 
@@ -294,7 +414,7 @@ app.post('/api/compose/up', async (req, res) => {
 });
 
 // POST /api/compose/down - Stop all compose services
-app.post('/api/compose/down', async (req, res) => {
+app.post('/api/compose/down', authenticateToken, async (req, res) => {
   try {
     const { removeOrphans } = req.query;
     const command = removeOrphans === 'true' 
@@ -314,7 +434,7 @@ app.post('/api/compose/down', async (req, res) => {
 });
 
 // POST /api/compose/rebuild - Rebuild and start compose services
-app.post('/api/compose/rebuild', async (req, res) => {
+app.post('/api/compose/rebuild', authenticateToken, async (req, res) => {
   try {
     const { stdout, stderr } = await execAsync('docker compose up --build -d', { cwd: '/app' });
     res.json({ 
@@ -329,7 +449,7 @@ app.post('/api/compose/rebuild', async (req, res) => {
 });
 
 // GET /api/system/stats - Get host machine system stats
-app.get('/api/system/stats', async (req, res) => {
+app.get('/api/system/stats', authenticateToken, async (req, res) => {
   try {
     // Get CPU stats from /proc/stat
     const { stdout: cpuInfo } = await execAsync("cat /proc/stat | grep '^cpu ' | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'");
