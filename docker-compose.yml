@@ -33,7 +33,7 @@ services:
     networks:
       - bjit-network
     ports:
-      - "27017:27017"
+      - "27018:27017"
     environment:
       - MONGO_INITDB_DATABASE=${MONGO_INITDB_DATABASE}
     volumes:
@@ -101,6 +101,20 @@ services:
     tty: true
     restart: unless-stopped
 
+  web:
+    build: ./web
+    container_name: dnmonitor-web
+    networks:
+      - bjit-network
+    ports:
+      - "3002:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    restart: unless-stopped
+
   nginx:
     build: ./nginx
     container_name: dnmonitor-nginx
@@ -111,6 +125,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - web
     restart: unless-stopped
 
 networks:

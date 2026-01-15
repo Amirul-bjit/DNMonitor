@@ -56,6 +56,7 @@ const authenticateToken = (req, res, next) => {
 
 app.use(cors({
   origin: [
+    'http://localhost:3002',
     'http://localhost:8081',
     'http://localhost:8082',
     'http://localhost:19000',
@@ -115,7 +116,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/verify', authenticateToken, (req, res) => {
+app.get('/api/auth/verify', authenticateToken, (req, res) => {
   res.json({ 
     success: true, 
     user: {

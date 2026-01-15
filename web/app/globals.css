@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cyber-dark: #0a0a0a;
+  --color-cyber-darker: #050505;
+  --color-cyber-gray: #1a1a1a;
+  --color-cyber-border: #2a2a2a;
+  --color-cyber-green: #00ff41;
+  --color-cyber-blue: #00d9ff;
+  --color-cyber-purple: #a855f7;
+}
+
+body {
+  background-color: #0a0a0a;
+  color: white;
+}
+
+::-webkit-scrollbar {
+  width: 0.5rem;
+}
+
+::-webkit-scrollbar-track {
+  background-color: #050505;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #2a2a2a;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 255, 65, 0.3);
+}
+
+.cyber-card {
+  background-color: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  transition: all 0.3s;
+}
+
+.cyber-card:hover {
+  border-color: rgba(0, 255, 65, 0.3);
+  box-shadow: 0 10px 15px -3px rgba(0, 255, 65, 0.1);
+}
+
+.cyber-button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: all 0.3s;
+  background-color: #00ff41;
+  color: #0a0a0a;
+}
+
+.cyber-button:hover {
+  background-color: rgba(0, 255, 65, 0.9);
+  box-shadow: 0 10px 15px -3px rgba(0, 255, 65, 0.3);
+}
+
+.cyber-button:active {
+  transform: scale(0.95);
+}
+
+.cyber-button-secondary {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: all 0.3s;
+  background-color: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: white;
+}
+
+.cyber-button-secondary:hover {
+  border-color: rgba(0, 255, 65, 0.5);
+  background-color: rgba(26, 26, 26, 0.8);
+}
+
+.cyber-button-secondary:active {
+  transform: scale(0.95);
+}
+
+.cyber-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: #050505;
+  border: 1px solid #2a2a2a;
+  border-radius: 0.5rem;
+  color: white;
+  transition: all 0.3s;
+}
+
+.cyber-input::placeholder {
+  color: #6b7280;
+}
+
+.cyber-input:focus {
+  outline: none;
+  border-color: rgba(0, 255, 65, 0.5);
+  box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.2);
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-running {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-exited {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.status-restarting {
+  background-color: rgba(234, 179, 8, 0.2);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.gradient-text {
+  background: linear-gradient(to right, #00ff41, #00d9ff, #a855f7);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
