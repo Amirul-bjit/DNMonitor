@@ -2,7 +2,8 @@
 
 import { X, RefreshCw, Activity, AlertCircle } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchContainerLogs, fetchContainerStats, Container, ContainerStats } from '@/lib/api'
+import { useContainerStats } from '@/hooks/useContainerStats'
+import { fetchContainerLogs, Container } from '@/lib/api'
 
 interface LogModalProps {
   container: Container
@@ -21,15 +22,10 @@ export default function LogModal({ container, onClose }: LogModalProps) {
     queryFn: () => fetchContainerLogs(container.name, 100),
   })
 
-  // Fetch stats if container is running
-  const { 
-    data: stats,
-    error: statsError 
-  } = useQuery<ContainerStats>({
-    queryKey: ['containerStats', container.name],
-    queryFn: () => fetchContainerStats(container.name),
-    enabled: container.state === 'running',
-    refetchInterval: container.state === 'running' ? 2000 : false,
+  // Use WebSocket for real-time container stats
+  const { stats, error: statsError, isConnected } = useContainerStats({
+    containerName: container.name,
+    enabled: container.state === 'running'
   })
 
   const logs = logsData?.logs || 'No logs available'
@@ -59,7 +55,7 @@ export default function LogModal({ container, onClose }: LogModalProps) {
           <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4">
             <div className="flex items-center space-x-2 text-red-400 text-sm">
               <AlertCircle className="w-4 h-4" />
-              <span>Failed to load stats: {(statsError as Error).message}</span>
+              <span>Failed to load stats: {(statsError as unknown as Error).message}</span>
             </div>
           </div>
         )}
@@ -103,7 +99,7 @@ export default function LogModal({ container, onClose }: LogModalProps) {
             <div className="flex-1 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center justify-center">
               <div className="text-center">
                 <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
-                <p className="text-red-400">Failed to load logs: {(logsError as Error).message}</p>
+                <p className="text-red-400">Failed to load logs: {(logsError as unknown as Error).message}</p>
                 <button
                   onClick={() => refetchLogs()}
                   className="mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg"

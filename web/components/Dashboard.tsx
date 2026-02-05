@@ -7,9 +7,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import ContainerCard from './ContainerCard'
 import SystemStats from './SystemStats'
 import LogModal from './LogModal'
+import { useSystemStats } from '@/hooks/useSystemStats'
 import { 
   fetchContainers, 
-  fetchSystemStats, 
   composeAction,
   Container 
 } from '@/lib/api'
@@ -33,15 +33,11 @@ export default function Dashboard() {
     refetchInterval: autoRefresh ? 5000 : false,
   })
 
-  // Fetch system stats
+  // Use WebSocket for real-time system stats
   const { 
-    data: systemStats,
+    stats: systemStats,
     error: systemStatsError 
-  } = useQuery({
-    queryKey: ['systemStats'],
-    queryFn: fetchSystemStats,
-    refetchInterval: 1000,
-  })
+  } = useSystemStats()
 
   // Compose action mutation
   const composeMutation = useMutation({
@@ -150,7 +146,7 @@ export default function Dashboard() {
           <div className="cyber-card mb-6 border-red-500/50">
             <div className="flex items-center space-x-2 text-red-400">
               <AlertCircle className="w-5 h-5" />
-              <span>Failed to load system stats: {(systemStatsError as Error).message}</span>
+              <span>Failed to load system stats: {systemStatsError}</span>
             </div>
           </div>
         ) : systemStats && (

@@ -2,14 +2,13 @@
 
 import { useState } from 'react'
 import { Play, Square, RotateCw, Trash2, Eye, AlertCircle } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import ConfirmModal from './ConfirmModal'
+import { useContainerStats } from '@/hooks/useContainerStats'
 import { 
-  fetchContainerStats, 
   containerAction, 
   deleteContainer,
-  Container,
-  ContainerStats 
+  Container
 } from '@/lib/api'
 
 interface ContainerCardProps {
@@ -29,15 +28,10 @@ export default function ContainerCard({ container, onViewLogs }: ContainerCardPr
   const queryClient = useQueryClient()
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
 
-  // Fetch container stats
-  const { 
-    data: stats,
-    error: statsError 
-  } = useQuery<ContainerStats>({
-    queryKey: ['containerStats', container.name],
-    queryFn: () => fetchContainerStats(container.name),
-    enabled: container.state === 'running',
-    refetchInterval: container.state === 'running' ? 2000 : false,
+  // Use WebSocket for real-time container stats
+  const { stats, error: statsError, isConnected } = useContainerStats({
+    containerName: container.name,
+    enabled: container.state === 'running'
   })
 
   // Container action mutation
