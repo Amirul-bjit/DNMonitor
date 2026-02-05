@@ -3,13 +3,13 @@
 import { useAuth } from '@/contexts/AuthContext'
 import { useState } from 'react'
 import { LogOut, RefreshCw, Power, PowerOff, AlertCircle } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import ContainerCard from './ContainerCard'
 import SystemStats from './SystemStats'
 import LogModal from './LogModal'
 import { useSystemStats } from '@/hooks/useSystemStats'
+import { useContainers } from '@/hooks/useContainers'
 import { 
-  fetchContainers, 
   composeAction,
   Container 
 } from '@/lib/api'
@@ -17,21 +17,16 @@ import {
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const queryClient = useQueryClient()
-  const [autoRefresh, setAutoRefresh] = useState(true)
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null)
   const [showComposeMenu, setShowComposeMenu] = useState(false)
 
-  // Fetch containers with React Query
+  // Use WebSocket for real-time containers list
   const { 
-    data: containers = [], 
+    containers, 
     isLoading: containersLoading,
     error: containersError,
     refetch: refetchContainers 
-  } = useQuery({
-    queryKey: ['containers'],
-    queryFn: fetchContainers,
-    refetchInterval: autoRefresh ? 5000 : false,
-  })
+  } = useContainers()
 
   // Use WebSocket for real-time system stats
   const { 
@@ -75,17 +70,6 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-all ${
-                  autoRefresh
-                    ? 'bg-[#00ff41]/20 border-[#00ff41]/50 text-[#00ff41]'
-                    : 'bg-gray-500/20 border-gray-500/50 text-gray-400'
-                }`}
-              >
-                <RefreshCw className={`w-4 h-4 ${autoRefresh ? 'animate-spin' : ''}`} />
-                <span className="text-xs font-mono">{autoRefresh ? 'AUTO' : 'MANUAL'}</span>
-              </button>
               <div className="text-sm text-gray-400">
                 Welcome, <span className="text-[#00ff41] font-medium">{user?.username}</span>
               </div>
@@ -158,7 +142,7 @@ export default function Dashboard() {
           <div className="cyber-card border-red-500/50">
             <div className="flex items-center space-x-2 text-red-400 mb-4">
               <AlertCircle className="w-5 h-5" />
-              <span>Failed to load containers: {(containersError as Error).message}</span>
+              <span>Failed to load containers: {containersError}</span>
             </div>
             <button
               onClick={() => refetchContainers()}

@@ -559,6 +559,30 @@ io.use((socket, next) => {
   });
 });
 
+// Helper function to get containers list
+const getContainersList = async () => {
+  const containers = await docker.listContainers({ all: true });
+  
+  const monitoredContainers = containers
+    .filter(c => MONITORED_CONTAINERS.some(name => c.Names[0].includes(name)))
+    .map(c => ({
+      id: c.Id,
+      name: c.Names[0]?.replace(/^\//, '') || '',
+      image: c.Image,
+      state: c.State,
+      status: c.Status,
+      created: c.Created,
+      ports: c.Ports.map(p => ({
+        private: p.PrivatePort,
+        public: p.PublicPort,
+        type: p.Type
+      }))
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return monitoredContainers;
+};
+
 // Helper function to get system stats
 const getSystemStats = async () => {
   // Get CPU stats from /proc/stat
@@ -739,6 +763,58 @@ io.on('connection', (socket) => {
     if (intervalId) {
       clearInterval(intervalId);
       activeIntervals.delete(containerName);
+    }
+  });
+
+  // Subscribe to containers list
+  socket.on('subscribe:containers', async () => {
+    try {
+      console.log(`[Socket.IO] ${socket.user.username} subscribed to containers list`);
+
+      // Send initial containers list immediately
+      try {
+        const containers = await getContainersList();
+        socket.emit('containers:list', containers);
+      } catch (err) {
+        socket.emit('containers:error', { 
+          error: err.message 
+        });
+      }
+
+      // Set up interval to send containers list every 5 seconds
+      const intervalId = setInterval(async () => {
+        try {
+          const containers = await getContainersList();
+          socket.emit('containers:list', containers);
+        } catch (err) {
+          socket.emit('containers:error', { 
+            error: err.message 
+          });
+        }
+      }, 5000); // Update every 5 seconds
+
+      // Store interval ID with a special key for containers list
+      const containersKey = '__containers_list__';
+      if (activeIntervals.has(containersKey)) {
+        clearInterval(activeIntervals.get(containersKey));
+      }
+      activeIntervals.set(containersKey, intervalId);
+
+    } catch (err) {
+      socket.emit('containers:error', { 
+        error: err.message 
+      });
+    }
+  });
+
+  // Unsubscribe from containers list
+  socket.on('unsubscribe:containers', () => {
+    console.log(`[Socket.IO] ${socket.user.username} unsubscribed from containers list`);
+    const containersKey = '__containers_list__';
+    const intervalId = activeIntervals.get(containersKey);
+    if (intervalId) {
+      clearInterval(intervalId);
+      activeIntervals.delete(containersKey);
     }
   });
 
